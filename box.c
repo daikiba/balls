@@ -14,6 +14,9 @@
 #define METERS_TO_PIXELS 30.0f
 #define TARGET_FPS 60
 
+int screenTrueWidth = SCREEN_WIDTH;
+int screenTrueHeigh = SCREEN_HEIGHT;
+
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 TTF_Font* textFont = NULL;
@@ -22,22 +25,15 @@ SDL_Color textColorWhite = {224, 224, 224};
 char cmdBuffer[] = {0,0,0,0,0};
 int cmdBufferLen = 4;
 int cmdIdx = 0;
-int clownPosY = SCREEN_HEIGHT - 240;
-int ballPosY = SCREEN_HEIGHT - 180;
+int clownMarginY = 240;
+int ballMarginY = 180;
+int clownPosY = screenTrueHeigh - clownMarginY;
+int ballPosY = screenTrueHeigh - ballMarginY;
 b2World* world = NULL;
 float ballSize = 30.0f;
 float gMod = 6.0f;
-const char* ballTxt[] = {
-    "A","B","C","D","E","F",
-    "G","H","I","J","K","L",
-    "M","N","O","P","Q","R",
-    "S","T","U","V","W","X",
-    "Y","Z"," "
-};
-const char* ballNum[] {
-    "0","1","2","3","4","5",
-    "6","7","8","9",",","."
-};
+const char* ballTxt[255];
+
 int colorPalettes[][3] =
   {{0,1,2},{0,2,1},
    {1,0,2},{1,2,0},
@@ -47,9 +43,11 @@ typedef struct PhysBall {
   b2Body* body;
   SDL_Texture* texture;
 } PhysBall;
-
-
 std::list<PhysBall*> activeObjects;
+
+int max(int a, int b) {
+	return a > b ? a : b;
+}
 
 b2Body* createCircle(b2World* world, float x, float y, float radius) {
     b2BodyDef bodyDef;
@@ -68,16 +66,6 @@ b2Body* createCircle(b2World* world, float x, float y, float radius) {
     body->CreateFixture(&fixtureDef);
 
     return body;
-}
-
-SDL_Texture* createFilledRectTexture(SDL_Renderer* renderer, int radius) {
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, 2 * radius * METERS_TO_PIXELS, 2 * radius * METERS_TO_PIXELS, 32, SDL_PIXELFORMAT_RGBA32);
-    SDL_FillRect(surface, NULL, SDL_MapRGBA(surface->format, 255, 0, 0, 255));
-
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FreeSurface(surface);
-
-    return texture;
 }
 
 SDL_Texture* createFilledCircleTexture(SDL_Renderer* renderer, int radius, int letter) {
@@ -108,25 +96,11 @@ color palettes
                     tmpColor[colorPalettes[colorPlace][0]],
                     tmpColor[colorPalettes[colorPlace][1]],
                     tmpColor[colorPalettes[colorPlace][2]], 255);
-                //SDL_SetRenderDrawColor(surfaceRenderer, 255 - distMod, 32, 32+(int)(0.5*distMod), 255);
-                //SDL_SetRenderDrawColor(surfaceRenderer, randomColorC - distMod, randomColorA, randomColorA+(int)(0.5*distMod), 255);
                 SDL_RenderDrawPoint(surfaceRenderer, radius + x, radius + y);
             }
         }
     }
-    const char* targetTxt = ballTxt[26]; // Default value used will be a white space
-    if (letter >= 'a' && letter <= 'z') {
-        targetTxt = ballTxt[letter - 'a'];
-    } else if (letter >= '0' && letter <= '9') {
-        targetTxt = ballNum[letter - '0'];
-    } else if (letter == ',') {
-        targetTxt = ballNum[10];
-    } else if (letter == '.') {
-        targetTxt = ballNum[11];
-    } else {
-        letter = ' ';
-    }
-    cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
+    const char* targetTxt = ballTxt[letter % 256]; // Default value used will be a white space
 //    int ballChr = letter - 'a';
 //    ballChr = ballChr > 26 || ballChr < 0 ? 26 : ballChr;
     SDL_Surface* textSurfaceW = TTF_RenderText_Solid(textFont, targetTxt, textColorWhite);
@@ -165,8 +139,10 @@ void renderFilledCircle(SDL_Renderer* renderer, SDL_Texture* texture, b2Body* bo
 void initSDL() {
     SDL_Init(SDL_INIT_VIDEO);
     //window = SDL_CreateWindow("Kirjainbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-    window = SDL_CreateWindow("Kirjainbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    window = SDL_CreateWindow("Kirjainbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
+	SDL_GetWindowSize(window, &screenTrueWidth, &screenTrueHeigh);
+    //SDL_MaximizeWindow(window);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
@@ -206,11 +182,15 @@ void cleanup() {
 SDL_Texture* loadTexture(const char* path, SDL_Renderer* renderer) {
     SDL_Surface* surface = IMG_Load(path);
     if (!surface) {
+		printf("image load failed from path: %s\n", path);
         // Handle error, e.g., print an error message
         return NULL;
     }
 
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+	if (!texture) {
+		printf("creating texture from image failed. Image path: %s\n", path);
+	}
     SDL_FreeSurface(surface);
 
     return texture;
@@ -223,7 +203,6 @@ void renderTexture(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, i
 
 PhysBall* createPhysBall(int letter, float curLocation) {
     PhysBall* newBall = (PhysBall*)malloc(sizeof(struct PhysBall));
-//    b2Body* b = createCircle(world, SCREEN_WIDTH / 2, 0.0f, ballSize);
     int ballMod = rand() % 30;
     b2Body* b = createCircle(world, curLocation, ballPosY, ballSize + (float)ballMod);
     SDL_Texture* t = createFilledCircleTexture(renderer, (int)ballSize + ballMod, letter);
@@ -240,9 +219,23 @@ PhysBall* createPhysBall(int letter, float curLocation) {
     return newBall;
 }
 
-
 int main() {
     initSDL();
+	
+	// Init text for keys
+	for (int i = 0; i < 256; i++) {
+		char* tmpStr = (char*)malloc(2*sizeof(char));
+		if ((i >= 'a' && i <= 'z') || i == 0xf6 || i == 0xe4 || i == 0xe5) {
+			tmpStr[0] = i - 'a' + 'A';
+		} else {
+			tmpStr[0] = max(i, 32);
+		}
+		tmpStr[1] = 0;
+		ballTxt[i] = tmpStr;
+	}
+
+	clownPosY = screenTrueHeigh - clownMarginY;
+	ballPosY = screenTrueHeigh - ballMarginY;
 
     // Initialize SDL_ttf
     if (TTF_Init() != 0) {
@@ -251,18 +244,18 @@ int main() {
         return 1;
     }
 
-    textFont = TTF_OpenFont("/usr/share/fonts/truetype/freefont/FreeSans.ttf", 24);
+    textFont = TTF_OpenFont("./AndikaCompact-Regular.ttf", 24);
     if (!textFont) {
         // Handle font loading failure
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         TTF_Quit();
         SDL_Quit();
-        printf("Fonts could not be loaded!");
+        printf("Fonts could not be loaded!\n");
         return 1;
     }
 
-    SDL_Texture* clownTexture = loadTexture("clown.png", renderer);
+    SDL_Texture* clownTexture = loadTexture("./clown.png", renderer);
 
     initBox2D();
     std::vector<PhysBall*> bodiesToDestroy;
@@ -279,17 +272,25 @@ int main() {
     }
 
     char lastCommand[] = {'a','a','a','a',0};
-
+	
     while (!quit) {
         frameStart = SDL_GetTicks(); // Get the current time at the beginning of the frame
-        float currentXPos = SCREEN_WIDTH * (0.5f + 0.5f * sin((float)SDL_GetTicks() / 1000.0f));
+        float currentXPos = screenTrueWidth * (0.5f + 0.5f * sin((float)SDL_GetTicks() / 1000.0f));
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
                 quit = true;
             } else if (e.type == SDL_KEYDOWN) {
-                PhysBall* newBall = createPhysBall(e.key.keysym.sym, currentXPos);
+				int letter = e.key.keysym.sym;
+				letter = letter > 255 ? 32 : letter;
+				printf("Key code: %i (%x)\n", letter, letter);
+                PhysBall* newBall = createPhysBall(letter, currentXPos);
+				cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
                 activeObjects.push_back(newBall);
-            }
+            } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_RESIZED) {
+				SDL_GetWindowSize(window, &screenTrueWidth, &screenTrueHeigh);
+				clownPosY = screenTrueHeigh - clownMarginY;
+				ballPosY = screenTrueHeigh - ballMarginY;
+			}
         }
 
         //    activeObjects.push_back(createPhysBall());
@@ -308,7 +309,7 @@ int main() {
 
         // Draw non-fallen objects
         for (PhysBall* physBall : activeObjects) {
-          if (static_cast<int>(physBall->body->GetPosition().y) * METERS_TO_PIXELS > SCREEN_HEIGHT) {
+          if (static_cast<int>(physBall->body->GetPosition().y) * METERS_TO_PIXELS > screenTrueHeigh) {
             bodiesToDestroy.push_back(physBall);
           } else {
             // Render the falling circle
@@ -317,7 +318,7 @@ int main() {
             if (posX < 0) {
                 b2Vec2 velocity(6.0f, physBall->body->GetLinearVelocity().y);
                 physBall->body->SetLinearVelocity(velocity);
-            } else if (posX > SCREEN_WIDTH) {
+            } else if (posX > screenTrueWidth) {
                 b2Vec2 velocity(-6.0f, physBall->body->GetLinearVelocity().y);
                 physBall->body->SetLinearVelocity(velocity);
             }
