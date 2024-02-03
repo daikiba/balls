@@ -37,7 +37,10 @@ const char* ballTxt[255];
 int colorPalettes[][3] =
   {{0,1,2},{0,2,1},
    {1,0,2},{1,2,0},
-   {2,0,1},{2,1,0}};
+   {2,0,1},{2,1,0},
+   {1,0,1},{1,1,0},
+   {0,1,1},{0,0,1},
+   {1,0,0},{0,1,0}};
 
 typedef struct PhysBall {
   b2Body* body;
@@ -76,22 +79,17 @@ SDL_Texture* createFilledCircleTexture(SDL_Renderer* renderer, int radius, int l
 
     SDL_Renderer* surfaceRenderer = SDL_CreateSoftwareRenderer(surface);
     
-    int colorPlace = rand() % 7;
-/*
-color palettes
-1 2 3
-1 3 2
-2 1 3
-2 3 1
-3 1 2
-3 2 1
-*/
+    int colorPlace = rand() % 12;
+    int r2 = radius * radius;
     // Draw filled circle
     for (int x = -radius; x <= radius; ++x) {
         for (int y = -radius; y <= radius; ++y) {
-            if (x*x + y*y <= radius * radius) {
-                Uint32 distMod = (int)(sqrt(x*x + y*y) / radius * 96);
-                int tmpColor[] = {255 - (int)distMod, 32, 32+(int)(0.5*distMod)};
+            int x2 = x*x;
+            int y2 = y*y;
+            if (x2 + y2 <= r2) {
+                float distMod = (sqrt(x2 + y2)) / radius;
+                int fadeColor = 255 - (int)(127.0f * distMod);
+                int tmpColor[] = {fadeColor, 0, fadeColor};
                 SDL_SetRenderDrawColor(surfaceRenderer,
                     tmpColor[colorPalettes[colorPlace][0]],
                     tmpColor[colorPalettes[colorPlace][1]],
@@ -100,9 +98,8 @@ color palettes
             }
         }
     }
+
     const char* targetTxt = ballTxt[letter % 256]; // Default value used will be a white space
-//    int ballChr = letter - 'a';
-//    ballChr = ballChr > 26 || ballChr < 0 ? 26 : ballChr;
     SDL_Surface* textSurfaceW = TTF_RenderText_Solid(textFont, targetTxt, textColorWhite);
     SDL_Surface* textSurfaceB = TTF_RenderText_Solid(textFont, targetTxt, textColorBlack);
 
@@ -124,8 +121,6 @@ void renderFilledCircle(SDL_Renderer* renderer, SDL_Texture* texture, b2Body* bo
     b2Vec2 position = body->GetPosition();
     float radius = ((b2CircleShape*)body->GetFixtureList()->GetShape())->m_radius * METERS_TO_PIXELS;
 
-    //printf("x: %f, y: %f, size: %f\n", position.x, position.y, radius);
-
     SDL_Rect destinationRect = {
         static_cast<int>(position.x * METERS_TO_PIXELS - radius),
         static_cast<int>(position.y * METERS_TO_PIXELS - radius),
@@ -136,13 +131,16 @@ void renderFilledCircle(SDL_Renderer* renderer, SDL_Texture* texture, b2Body* bo
     SDL_RenderCopy(renderer, texture, NULL, &destinationRect);
 }
 
+void syncScreenSize() {
+	  SDL_GetWindowSize(window, &screenTrueWidth, &screenTrueHeigh);
+    screenTrueHeigh = max(0, screenTrueHeigh);
+    screenTrueWidth = max(0, screenTrueWidth);
+}
+
 void initSDL() {
     SDL_Init(SDL_INIT_VIDEO);
-    //window = SDL_CreateWindow("Kirjainbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-    window = SDL_CreateWindow("Kirjainbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_MAXIMIZED);
-	SDL_GetWindowSize(window, &screenTrueWidth, &screenTrueHeigh);
-    //SDL_MaximizeWindow(window);
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    window = SDL_CreateWindow("Ballblower", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_SHOWN);
+  	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 }
 
@@ -203,14 +201,13 @@ void renderTexture(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, i
 
 PhysBall* createPhysBall(int letter, float curLocation) {
     PhysBall* newBall = (PhysBall*)malloc(sizeof(struct PhysBall));
-    int ballMod = rand() % 30;
-    b2Body* b = createCircle(world, curLocation, ballPosY, ballSize + (float)ballMod);
+    int ballMod = rand() % (int)ballSize;
+    b2Body* b = createCircle(world, curLocation, (float)ballPosY, ballSize + (float)ballMod);
     SDL_Texture* t = createFilledCircleTexture(renderer, (int)ballSize + ballMod, letter);
 
     // Set the linear velocity for the body
     float speedMod = 0.6 + (rand() % 5000) / 5000.0;
     float dirMod = ((rand() % 1000) / 1000.0) * 16.0f;
-    //printf("%f\n", speedMod);
     b2Vec2 velocity(speedMod * (8.0f - dirMod), - speedMod * 16.0f * sqrt(gMod));
     b->SetLinearVelocity(velocity);
 
@@ -244,7 +241,7 @@ int main() {
         return 1;
     }
 
-    textFont = TTF_OpenFont("./AndikaCompact-Regular.ttf", 24);
+    textFont = TTF_OpenFont("./AndikaCompact-Regular.ttf", 32);
     if (!textFont) {
         // Handle font loading failure
         SDL_DestroyRenderer(renderer);
@@ -280,14 +277,13 @@ int main() {
             if (e.type == SDL_QUIT) {
                 quit = true;
             } else if (e.type == SDL_KEYDOWN) {
-				int letter = e.key.keysym.sym;
-				letter = letter > 255 ? 32 : letter;
-				printf("Key code: %i (%x)\n", letter, letter);
-                PhysBall* newBall = createPhysBall(letter, currentXPos);
-				cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
+				        int letter = e.key.keysym.sym;
+				        letter = letter > 255 ? 32 : letter;
+                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
+				        cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
                 activeObjects.push_back(newBall);
             } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_RESIZED) {
-				SDL_GetWindowSize(window, &screenTrueWidth, &screenTrueHeigh);
+        syncScreenSize();
 				clownPosY = screenTrueHeigh - clownMarginY;
 				ballPosY = screenTrueHeigh - ballMarginY;
 			}
@@ -339,7 +335,7 @@ int main() {
 
         // Calculate the time taken for this frame
         frameTime = SDL_GetTicks() - frameStart;
-        //printf("%i < %i\n", frameTime, targetMs);
+
         Uint32 quitCode = 0;
         bool lastCmdMatch = true;
         for (int i = 0; i< cmdBufferLen; i++) {
@@ -348,8 +344,6 @@ int main() {
             lastCommand[i] = cmdBuffer[i];
         }
         if (!lastCmdMatch) {
-            //printf("last command: %s\n", lastCommand);
-            //printf("%x\n", quitCode);
             if (quitCode == 0x71756974) quit = true;
         }
 
