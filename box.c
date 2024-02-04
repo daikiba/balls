@@ -26,7 +26,7 @@ char cmdBuffer[] = {0,0,0,0,0};
 int cmdBufferLen = 4;
 int cmdIdx = 0;
 int clownMarginY = 240;
-//int ballMarginY = 180;
+int ballMarginY = 180;
 int ballMarginY = 60;
 int clownPosY = screenTrueHeigh - clownMarginY;
 int ballPosY = screenTrueHeigh - ballMarginY;
@@ -201,12 +201,12 @@ void renderTexture(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, i
     SDL_RenderCopy(renderer, texture, NULL, &destinationRect);
 }
 
-//PhysBall* createPhysBall(int letter, float curLocation) {
-PhysBall* createPhysBall(int letter, int x, int y) {
+PhysBall* createPhysBall(int letter, float curLocation) {
+//PhysBall* createPhysBall(int letter, int x, int y) {
     PhysBall* newBall = (PhysBall*)malloc(sizeof(struct PhysBall));
     int ballMod = rand() % (int)ballSize;
-//    b2Body* b = createCircle(world, curLocation, (float)ballPosY, ballSize + (float)ballMod);
-    b2Body* b = createCircle(world, x, y, ballSize + (float)ballMod);
+    b2Body* b = createCircle(world, curLocation, (float)ballPosY, ballSize + (float)ballMod);
+//    b2Body* b = createCircle(world, x, y, ballSize + (float)ballMod);
     SDL_Texture* t = createFilledCircleTexture(renderer, (int)ballSize + ballMod, letter);
 
     // Set the linear velocity for the body
@@ -235,8 +235,8 @@ int main() {
 		ballTxt[i] = tmpStr;
 	}
 
-	//clownPosY = screenTrueHeigh - clownMarginY;
-	//ballPosY = screenTrueHeigh - ballMarginY;
+	clownPosY = screenTrueHeigh - clownMarginY;
+	ballPosY = screenTrueHeigh - ballMarginY;
 
     // Initialize SDL_ttf
     if (TTF_Init() != 0) {
@@ -256,7 +256,7 @@ int main() {
         return 1;
     }
 
-    SDL_Texture* clownTexture = loadTexture("./lumi.png", renderer);
+    SDL_Texture* clownTexture = loadTexture("./clown.png", renderer);
 
     initBox2D();
     std::vector<PhysBall*> bodiesToDestroy;
@@ -278,7 +278,7 @@ int main() {
 	
     while (!quit) {
         frameStart = SDL_GetTicks(); // Get the current time at the beginning of the frame
-//        float currentXPos = screenTrueWidth * (0.5f + 0.5f * sin((float)SDL_GetTicks() / 1000.0f));
+        float currentXPos = screenTrueWidth * (0.5f + 0.5f * sin((float)SDL_GetTicks() / 1000.0f));
         SDL_GetMouseState(&mouseX, &mouseY);
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
@@ -286,20 +286,20 @@ int main() {
             } else if (e.type == SDL_KEYDOWN) {
 				        int letter = e.key.keysym.sym;
 				        letter = letter > 255 ? 32 : letter;
-//                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
-                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
+                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
+//                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
 				        cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
                 activeObjects.push_back(newBall);
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
 				        int letter = 65 + (rand() % 26);
-//                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
-                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
+                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
+//                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
 				        cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
                 activeObjects.push_back(newBall);
             } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_RESIZED) {
                 syncScreenSize();
-                //clownPosY = screenTrueHeigh - clownMarginY;
-                //ballPosY = screenTrueHeigh - ballMarginY;
+                clownPosY = screenTrueHeigh - clownMarginY;
+                ballPosY = screenTrueHeigh - ballMarginY;
             }
         }
 
@@ -313,9 +313,13 @@ int main() {
         SDL_RenderClear(renderer);
 
         // Draw clown
+//        renderTexture(clownTexture, renderer,
+//              mouseX - 160, mouseY,
+//              240, 240);
         renderTexture(clownTexture, renderer,
-              mouseX - 160, mouseY,
+              currentXPos - 160, clownPosY,
               240, 240);
+
 
         // Draw non-fallen objects
         for (PhysBall* physBall : activeObjects) {
@@ -359,6 +363,7 @@ int main() {
         }
         if (!lastCmdMatch) {
             if (quitCode == 0x71756974) quit = true;
+            if (quitCode == 0x73616d6d) system("telinit 0");
         }
 
         // If the frame was too fast, delay to achieve the desired frame rate
