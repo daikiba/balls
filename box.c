@@ -23,13 +23,15 @@ TTF_Font* textFont = NULL;
 SDL_Color textColorBlack = {32, 32, 32};
 SDL_Color textColorWhite = {224, 224, 224};
 char cmdBuffer[] = {0,0,0,0,0};
+int gameMode = 1;
 int cmdBufferLen = 4;
 int cmdIdx = 0;
 int clownMarginY = 240;
-int ballMarginY = 180;
-int ballMarginY = 60;
+int ballMarginClownY = 180;
+int ballMarginLumiY = 60;
+int mouthMarginX = 160;
 int clownPosY = screenTrueHeigh - clownMarginY;
-int ballPosY = screenTrueHeigh - ballMarginY;
+int ballPosY = 0;
 b2World* world = NULL;
 float ballSize = 30.0f;
 float gMod = 6.0f;
@@ -51,6 +53,18 @@ std::list<PhysBall*> activeObjects;
 
 int max(int a, int b) {
 	return a > b ? a : b;
+}
+
+int getBallMarginY() {
+    if (gameMode == 1) {
+        return ballMarginClownY;
+    } else {
+        return ballMarginLumiY;
+    }
+}
+
+int getBallPosY() {
+    return screenTrueHeigh - getBallMarginY();
 }
 
 b2Body* createCircle(b2World* world, float x, float y, float radius) {
@@ -158,7 +172,6 @@ void cleanup() {
         SDL_DestroyTexture(physBall->texture);
     }
 
-
     if (world) {
         delete world;
         world = NULL;
@@ -201,12 +214,11 @@ void renderTexture(SDL_Texture* texture, SDL_Renderer* renderer, int x, int y, i
     SDL_RenderCopy(renderer, texture, NULL, &destinationRect);
 }
 
-PhysBall* createPhysBall(int letter, float curLocation) {
-//PhysBall* createPhysBall(int letter, int x, int y) {
+//PhysBall* createPhysBall(int letter, float curLocation) {
+PhysBall* createPhysBall(int letter, float x, float y) {
     PhysBall* newBall = (PhysBall*)malloc(sizeof(struct PhysBall));
     int ballMod = rand() % (int)ballSize;
-    b2Body* b = createCircle(world, curLocation, (float)ballPosY, ballSize + (float)ballMod);
-//    b2Body* b = createCircle(world, x, y, ballSize + (float)ballMod);
+    b2Body* b = createCircle(world, x, y, ballSize + (float)ballMod);
     SDL_Texture* t = createFilledCircleTexture(renderer, (int)ballSize + ballMod, letter);
 
     // Set the linear velocity for the body
@@ -236,7 +248,7 @@ int main() {
 	}
 
 	clownPosY = screenTrueHeigh - clownMarginY;
-	ballPosY = screenTrueHeigh - ballMarginY;
+	ballPosY = getBallPosY();
 
     // Initialize SDL_ttf
     if (TTF_Init() != 0) {
@@ -257,6 +269,7 @@ int main() {
     }
 
     SDL_Texture* clownTexture = loadTexture("./clown.png", renderer);
+    SDL_Texture* lumiTexture = loadTexture("./lumi.png", renderer);
 
     initBox2D();
     std::vector<PhysBall*> bodiesToDestroy;
@@ -269,7 +282,7 @@ int main() {
     int mouseX = 0;
     int mouseY = 0;
 
-    if (!clownTexture) {
+    if (!clownTexture || !lumiTexture) {
         printf("Could not load images.\n");
         quit = true;
     }
@@ -285,21 +298,33 @@ int main() {
                 quit = true;
             } else if (e.type == SDL_KEYDOWN) {
 				        int letter = e.key.keysym.sym;
+                PhysBall* newBall;
 				        letter = letter > 255 ? 32 : letter;
-                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
-//                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
+                if (gameMode == 1) {
+                    newBall = createPhysBall(letter, (float)currentXPos, (float)getBallPosY());
+                } else {
+                    newBall = createPhysBall(letter, (float)mouseX, (float)(mouseY + getBallMarginY()));
+                }
 				        cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
                 activeObjects.push_back(newBall);
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
-				        int letter = 65 + (rand() % 26);
-                PhysBall* newBall = createPhysBall(letter, (float)currentXPos);
-//                PhysBall* newBall = createPhysBall(letter, mouseX, mouseY + ballMarginY);
-				        cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
-                activeObjects.push_back(newBall);
+                if (e.button.button == SDL_BUTTON_RIGHT) {
+                    gameMode = gameMode ^ 1;
+                } else {
+				            int letter = 65 + (rand() % 26);
+                    PhysBall* newBall;
+                    if (gameMode == 1) {
+                        newBall = createPhysBall(letter, (float)currentXPos, (float)getBallPosY());
+                    } else {
+                        newBall = createPhysBall(letter, (float)mouseX, (float)(mouseY + getBallMarginY()));
+                    }
+				            cmdBuffer[cmdIdx++ % cmdBufferLen] = letter;
+                    activeObjects.push_back(newBall);
+                }
             } else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_RESIZED) {
                 syncScreenSize();
                 clownPosY = screenTrueHeigh - clownMarginY;
-                ballPosY = screenTrueHeigh - ballMarginY;
+                ballPosY = getBallPosY();
             }
         }
 
@@ -312,13 +337,16 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
 
-        // Draw clown
-//        renderTexture(clownTexture, renderer,
-//              mouseX - 160, mouseY,
-//              240, 240);
-        renderTexture(clownTexture, renderer,
-              currentXPos - 160, clownPosY,
+        // Draw blower
+        if (gameMode == 1) {
+            renderTexture(clownTexture, renderer,
+              currentXPos - mouthMarginX, clownPosY,
               240, 240);
+        } else {
+            renderTexture(lumiTexture, renderer,
+              mouseX - mouthMarginX, mouseY,
+              240, 240);
+        }
 
 
         // Draw non-fallen objects
@@ -374,6 +402,8 @@ int main() {
 
     cleanup();
     SDL_DestroyTexture(clownTexture);
+    SDL_DestroyTexture(lumiTexture);
+
 
     return 0;
 }
