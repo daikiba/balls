@@ -232,7 +232,7 @@ void syncScreenSize() {
 }
 
 void initSDL() {
-	SDL_Init(SDL_INIT_VIDEO);
+	SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO);
 	window = SDL_CreateWindow(
 		"Ballblower",
 		SDL_WINDOWPOS_CENTERED,
@@ -319,6 +319,49 @@ PhysBall* createPhysBall(int letter, float x, float y) {
 
 int main() {
 	initSDL();
+
+  // Open audio device
+  SDL_AudioSpec desired_spec;
+  SDL_memset(&desired_spec, 0, sizeof(desired_spec));
+  desired_spec.freq = 44100; // Set desired frequency (adjust as needed)
+  desired_spec.format = AUDIO_S16LSB; // Set desired audio format
+  desired_spec.channels = 2; // Set desired number of channels
+  desired_spec.samples = 1024; // Set desired sample buffer size
+  SDL_AudioSpec obtained_spec;
+  SDL_AudioDeviceID device = SDL_OpenAudioDevice(NULL, 0, &desired_spec, &obtained_spec, 0);
+  if (device == 0) {
+    fprintf(stderr, "Failed to open audio device! SDL Error: %s\n", SDL_GetError());
+    SDL_Quit();
+    return 1;
+  }
+
+  // Load audio sample
+  SDL_RWops* audio_file = SDL_RWFromFile("quack.wav", "rb");
+  if (audio_file == NULL) {
+    fprintf(stderr, "Failed to open audio file: %s\n", "quack.wav");
+    SDL_CloseAudioDevice(device);
+    SDL_Quit();
+    return 1;
+  }
+  SDL_AudioSpec wave_spec;
+
+  Uint32 wave_length = SDL_RWseek(audio_file, 0, SEEK_END);
+  SDL_RWseek(audio_file, 0, SEEK_SET);
+  wave_spec.freq = obtained_spec.freq;
+  wave_spec.format = obtained_spec.format;
+  wave_spec.channels = obtained_spec.channels;
+  wave_spec.samples = (Uint32)(wave_length / obtained_spec.size);
+  wave_spec.callback = NULL; // We don't need a callback for this simple example
+  wave_spec.userdata = NULL;
+  void* wave_data = malloc(wave_length);
+  if (wave_data == NULL) {
+    fprintf(stderr, "Failed to allocate memory for audio data\n");
+    SDL_RWclose(audio_file);
+    SDL_CloseAudioDevice(device);
+    SDL_Quit();
+    return 1;
+  }
+  SDL_RWread(audio_file, wave_data, 1, wave_length);
 	
 	// Init text for keys
 	for (int i = 0; i < printChars; i++) {
@@ -493,6 +536,11 @@ int main() {
 		if (!lastCmdMatch) {
 			if (quitCode == 0x71756974) quit = true;
 			if (quitCode == 0x73616d6d) system("telinit 0");
+			if (quitCode == 0x6475636b) {
+				// Play audio sample
+				SDL_QueueAudio(device, wave_data, wave_length);
+				SDL_PauseAudioDevice(device, 0); // Start playing
+			}
 		}
 
 		lastTextTime += targetMs;
@@ -509,7 +557,9 @@ int main() {
 	cleanup();
 	SDL_DestroyTexture(clownTexture);
 	SDL_DestroyTexture(lumiTexture);
-
+  SDL_CloseAudioDevice(device);
+  SDL_RWclose(audio_file);
+  free(wave_data);
 
 	return 0;
 }

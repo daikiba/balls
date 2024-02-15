@@ -1,0 +1,29 @@
+# Interactive stuff for a toddler
+
+## == What is this ==
+
+Simple interactive demos using Box2D for physics simulation and SDL2 for media and events. Something for a toddler to play around with safely and hopefully be entertained for a while.
+
+
+## == How to run ==
+
+Requires libbox2d, libsdl2, libsdl2-ttf and libsdl2-image.
+
+Compile example:
+```
+g++ -std=gnu++11 box.c -lSDL2 -lBox2D -lSDL2_ttf -lSDL2_image -o boxgame
+```
+
+
+Run example:
+```
+./boxgame
+```
+
+## == Credits ==
+
+### AndikaCompact-Regular.ttf
+Font file was downloaded from https://software.sil.org/andika/download/ under the terms of the SIL Open Font License.
+
+### quack.wav
+Duck Quack by iedurodrigues, downloaded from https://pixabay.com/sound-effects/duck-quack-112941/ as mp3 and converted to wav.
