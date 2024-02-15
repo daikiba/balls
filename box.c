@@ -336,7 +336,7 @@ int main() {
   }
 
   // Load audio sample
-  SDL_RWops* audio_file = SDL_RWFromFile("quack.wav", "rb");
+  SDL_RWops* audio_file = SDL_RWFromFile("./quack.wav", "rb");
   if (audio_file == NULL) {
     fprintf(stderr, "Failed to open audio file: %s\n", "quack.wav");
     SDL_CloseAudioDevice(device);
